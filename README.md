@@ -1,8 +1,12 @@
 <div align="center">
   <img src="https://github.com/ssambender/nftViewer/blob/main/cardExample.png?raw=true" height=300>
+  ‎ ‎ ‎ ‎ ‎ ‎ ‎ 
+  <img src="https://github.com/ssambender/nftViewer/blob/main/exampleSeasonPass.png?raw=true" height=300>
+  ‎ ‎ ‎ ‎ ‎ ‎ ‎ 
+  <img src="https://github.com/ssambender/nftViewer/blob/main/exampleVespa.png?raw=true" height=300>
 </div>
 
-<h3 align="center">NFT Viewer | Mint and view cards</h3>
+<h3 align="center">NFT Viewer | Mint and view commemorative SBTs</h3>
 
 <p align="center">
 Visualize and mint soul bound NFTs as well as view from wallet in a stylized format.
