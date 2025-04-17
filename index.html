@@ -83,6 +83,23 @@
 
     <input type="file" id="bgUpload" accept="image/*" style="padding-top: 0;">
 
+    <!-- Duotone dropdown control -->
+    <label for="duotoneStyle">Duotone:</label>
+    <select id="duotoneStyle">
+        <option value="none" selected>None</option>
+        <option value="red">Red</option>
+        <option value="redyellow">Amber</option>
+        <option value="green">Green</option>
+        <option value="blue">Cyan</option>
+        <option value="bluered">Blue/Red</option>
+        <option value="purple">Magenta</option>
+        <option value="bluegreen">Blue/Green Inverse</option>
+        <option value="bluepurple">Plum</option>
+        <option value="thermal">Thermal</option>
+        <option value="bubblegum">Bubblegum</option>
+        <option value="gray">Gray</option>
+    </select>
+
     <button onClick="generateCard().catch(console.error)">Generate Card</button>
 </div>
 
@@ -91,6 +108,7 @@
 </div>
 
 <script>
+    // Font loading for EHSMB
     const ehsmbFont = new FontFace('EHSMB', 'url(EHSMB.TTF)');
     ehsmbFont.load().then(function(loadedFont) {
         document.fonts.add(loadedFont);
@@ -98,6 +116,63 @@
     }).catch(function(error) {
         console.error('Failed to load EHSMB font:', error);
     });
+
+    // Duotone preset color pairs
+    // Each is [shadowColor, highlightColor]
+    const DUOTONE_PRESETS = {
+        none: null,
+        red:   ['#3d0000', '#ff3c3c'],
+        redyellow:   ['#a30000', '#feb42a'],
+        blue:  ['#062b62', '#41e7ff'],
+        bluered:  ['#004491', '#f95353'],
+        green: ['#06360d', '#59dc3f'],
+        bluegreen: ['#00ff40', '#0033ff'],
+        purple: ['#3c005c', '#f872f4'],
+        bluepurple: ['#690896', '#55bfec'],
+        thermal: ['#c51ee6', '#fbff00'],
+        bubblegum: ['#ff00ae', '#feb4fb'],
+        gray: ['#242424', '#e3e3e3']
+
+    };
+
+    // Duotone processing function
+    function applyDuotoneToCanvas(canvas, color1, color2) {
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        // Convert hex to RGB
+        function hexToRgb(hex) {
+            hex = hex.replace(/^#/, '');
+            if (hex.length === 3) {
+                hex = hex.split('').map(x => x + x).join('');
+            }
+            const num = parseInt(hex, 16);
+            return [
+                (num >> 16) & 255,
+                (num >> 8) & 255,
+                num & 255
+            ];
+        }
+
+        const rgb1 = hexToRgb(color1); // Shadow
+        const rgb2 = hexToRgb(color2); // Highlight
+
+        // For each pixel, calculate luminance, interpolate between color1 and color2
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            // Perceived luminance (0..1)
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            // Interpolate
+            data[i]     = Math.round(rgb1[0] + (rgb2[0] - rgb1[0]) * lum);
+            data[i + 1] = Math.round(rgb1[1] + (rgb2[1] - rgb1[1]) * lum);
+            data[i + 2] = Math.round(rgb1[2] + (rgb2[2] - rgb1[2]) * lum);
+            // Alpha stays the same
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
 
     async function generateCard() {
         await document.fonts.ready;
@@ -109,57 +184,61 @@
         const fileInput = document.getElementById("bgUpload");
         const file = fileInput.files[0];
 
+        // Duotone dropdown
+        const duotoneStyle = document.getElementById('duotoneStyle').value;
+        const duotoneColors = DUOTONE_PRESETS[duotoneStyle];
+
         // Target dimensions for image cropping
         const targetWidth = 1162;
         const targetHeight = 1230;
         const targetX = 55;
         const targetY = 33;
 
-        const processImage = (image) => {
-            return new Promise((resolve) => {
-                // Create off-screen canvas for cropping
-                const cropCanvas = document.createElement('canvas');
-                cropCanvas.width = targetWidth;
-                cropCanvas.height = targetHeight;
-                const cropCtx = cropCanvas.getContext('2d');
-
-                // Calculate crop dimensions
-                const scale = Math.max(
-                    targetWidth / image.width,
-                    targetHeight / image.height
-                );
-                const scaledWidth = image.width * scale;
-                const scaledHeight = image.height * scale;
-                const offsetX = (scaledWidth - targetWidth) / 2;
-                const offsetY = (scaledHeight - targetHeight) / 2;
-
-                // Draw and crop image
-                cropCtx.drawImage(
-                    image,
-                    -offsetX, -offsetY,
-                    scaledWidth, scaledHeight
-                );
-
-                // Create final image
-                const finalImage = new Image();
-                finalImage.onload = () => resolve(finalImage);
-                finalImage.src = cropCanvas.toDataURL();
-            });
-        };
-
+        // Load the image
         const bgImg = new Image();
+        bgImg.crossOrigin = "anonymous";
         bgImg.src = file ? URL.createObjectURL(file) : 'placeholderImage.png';
 
         bgImg.onload = async () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Process and crop the image
-            const croppedImage = await processImage(bgImg);
+            // Step 1: Draw uploaded image to a temp canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = bgImg.width;
+            tempCanvas.height = bgImg.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(bgImg, 0, 0);
 
-            // Draw cropped image at target position
-            ctx.drawImage(croppedImage, targetX, targetY, targetWidth, targetHeight);
+            // Step 2: Apply duotone if needed
+            if (duotoneColors) {
+                applyDuotoneToCanvas(tempCanvas, duotoneColors[0], duotoneColors[1]);
+            }
 
-            // Continue with overlay + seal + stars + text
+            // Step 3: Crop to 1162x1230 centered, scaled to fill
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = targetWidth;
+            cropCanvas.height = targetHeight;
+            const cropCtx = cropCanvas.getContext('2d');
+
+            const scale = Math.max(
+                targetWidth / tempCanvas.width,
+                targetHeight / tempCanvas.height
+            );
+            const scaledWidth = tempCanvas.width * scale;
+            const scaledHeight = tempCanvas.height * scale;
+            const offsetX = (scaledWidth - targetWidth) / 2;
+            const offsetY = (scaledHeight - targetHeight) / 2;
+
+            cropCtx.drawImage(
+                tempCanvas,
+                -offsetX, -offsetY,
+                scaledWidth, scaledHeight
+            );
+
+            // Step 4: Draw cropped image to main canvas
+            ctx.drawImage(cropCanvas, targetX, targetY, targetWidth, targetHeight);
+
+            // Step 5: Overlay, seal, stars, text
             const overlay = new Image();
             overlay.src = 'cardOverlay.png';
             overlay.onload = () => {
@@ -215,10 +294,8 @@
         ctx.font = "94px EHSMB";
         ctx.fillStyle = "black";
         ctx.fillText(`${eventName}`, 43, 1330);
-        // todo - center
 
         ctx.fillText(`${eventName2}`, 43, 1440);
-
 
         // ## ORGANIZER NAME ##
         ctx.font = "48px Consolas";
@@ -231,7 +308,6 @@
 
         // ## ATTENDEE NUMBER ##
         const attendeeText = `${attendeeNum}`;
-        //ctx.font = "72px sans-serif";
         ctx.font = "72px EHSMB";
         ctx.fillStyle = "black";
         const attendeeMetrics = ctx.measureText(attendeeText);
