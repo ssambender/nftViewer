@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Card Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        @font-face {
+            font-family: 'EHSMB';
+            src: url('EHSMB.TTF') format('truetype');
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            background-color: #2d2d2d;
+            font-family: sans-serif;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .controlContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            color: white;
+        }
+
+        .controlContainer input,
+        .controlContainer select,
+        .controlContainer button {
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: none;
+        }
+
+        .cardContainer {
+            /*width: 1272px;*/
+            /*height: 1760px;*/
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            width: 1272px;
+            height: 1760px;
+            border-radius: 10px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #d3d3d3;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controlContainer">
+    <h2>Make NFT card</h2>
+
+    <input type="text" id="eventName" placeholder="Event Name" value="Event Name">
+    <input type="text" id="eventName2" placeholder="Event Name Line 2" value="Line 2">
+    <input type="text" id="organizerName" placeholder="Organizer Name" value="Organizer Name">
+    <input type="text" id="eventDate" placeholder="Event Date" value="04/02/2025">
+    <select id="sealColor">
+        <option value="">No Seal</option>
+        <option value="bronze">Bronze</option>
+        <option value="silver" selected>Silver</option>
+        <option value="gold">Gold</option>
+    </select>
+    <input type="number" id="stars" placeholder="# of Stars" min="0" max="5" value="3">
+    <input type="number" id="attendeeNum" placeholder="Attendee Number" value="0024" maxlength="9" oninput="if (this.value.length > this.maxLength) this.value = this.value.slice(0, this.maxLength);">
+    <input type="number" id="editionNum" placeholder="Edition #" value="000123">
+    <input type="number" id="cardNum" placeholder="Card #" value="0001" maxlength="12" oninput="if (this.value.length > this.maxLength) this.value = this.value.slice(0, this.maxLength);">
+    <input type="text" id="hashAddress" placeholder="Hash Address">
+
+    <input type="file" id="bgUpload" accept="image/*" style="padding-top: 0;">
+
+    <!-- Duotone dropdown control -->
+    <label for="duotoneStyle">Duotone:</label>
+    <select id="duotoneStyle">
+        <option value="none" selected>None</option>
+        <option value="red">Red</option>
+        <option value="redyellow">Amber</option>
+        <option value="green">Green</option>
+        <option value="blue">Cyan</option>
+        <option value="bluered">Blue/Red</option>
+        <option value="purple">Magenta</option>
+        <option value="bluegreen">Blue/Green Inverse</option>
+        <option value="bluepurple">Plum</option>
+        <option value="thermal">Thermal</option>
+        <option value="bubblegum">Bubblegum</option>
+        <option value="gray">Gray</option>
+    </select>
+
+    <button onClick="generateCard().catch(console.error)">Generate Card</button>
+</div>
+
+<div class="cardContainer">
+    <section class="cards">
+        <div class="three-d-wrapper">
+            <div class="card nft animated"></div>
+        </div>
+    </section>
+
+    <style class="hover"></style>
+
+    <canvas id="cardCanvas" width="1272" height="1760" style="display: none"></canvas>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+<script>
+    // Font loading for EHSMB
+    const ehsmbFont = new FontFace('EHSMB', 'url(EHSMB.TTF)');
+    ehsmbFont.load().then(function(loadedFont) {
+        document.fonts.add(loadedFont);
+        console.log('EHSMB font loaded');
+    }).catch(function(error) {
+        console.error('Failed to load EHSMB font:', error);
+    });
+
+    // Duotone preset color pairs
+    // Each is [shadowColor, highlightColor]
+    const DUOTONE_PRESETS = {
+        none: null,
+        red:   ['#3d0000', '#ff3c3c'],
+        redyellow:   ['#a30000', '#feb42a'],
+        blue:  ['#062b62', '#41e7ff'],
+        bluered:  ['#004491', '#f95353'],
+        green: ['#06360d', '#59dc3f'],
+        bluegreen: ['#00ff40', '#0033ff'],
+        purple: ['#3c005c', '#f872f4'],
+        bluepurple: ['#690896', '#55bfec'],
+        thermal: ['#c51ee6', '#fbff00'],
+        bubblegum: ['#ff00ae', '#feb4fb'],
+        gray: ['#242424', '#e3e3e3']
+
+    };
+
+    // Duotone processing function
+    function applyDuotoneToCanvas(canvas, color1, color2) {
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        // Convert hex to RGB
+        function hexToRgb(hex) {
+            hex = hex.replace(/^#/, '');
+            if (hex.length === 3) {
+                hex = hex.split('').map(x => x + x).join('');
+            }
+            const num = parseInt(hex, 16);
+            return [
+                (num >> 16) & 255,
+                (num >> 8) & 255,
+                num & 255
+            ];
+        }
+
+        const rgb1 = hexToRgb(color1); // Shadow
+        const rgb2 = hexToRgb(color2); // Highlight
+
+        // For each pixel, calculate luminance, interpolate between color1 and color2
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            // Perceived luminance (0..1)
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            // Interpolate
+            data[i]     = Math.round(rgb1[0] + (rgb2[0] - rgb1[0]) * lum);
+            data[i + 1] = Math.round(rgb1[1] + (rgb2[1] - rgb1[1]) * lum);
+            data[i + 2] = Math.round(rgb1[2] + (rgb2[2] - rgb1[2]) * lum);
+            // Alpha stays the same
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    async function generateCard() {
+        await document.fonts.ready;
+
+        const canvas = document.getElementById('cardCanvas');
+        const ctx = canvas.getContext('2d');
+        const stars = document.getElementById("stars").value;
+        const sealColor = document.getElementById("sealColor").value;
+        const fileInput = document.getElementById("bgUpload");
+        const file = fileInput.files[0];
+
+        // Duotone dropdown
+        const duotoneStyle = document.getElementById('duotoneStyle').value;
+        const duotoneColors = DUOTONE_PRESETS[duotoneStyle];
+
+        // Target dimensions for image cropping
+        const targetWidth = 1162;
+        const targetHeight = 1230;
+        const targetX = 55;
+        const targetY = 33;
+
+        // Load the image
+        const bgImg = new Image();
+        bgImg.crossOrigin = "anonymous";
+        bgImg.src = file ? URL.createObjectURL(file) : 'placeholderImage.png';
+
+        bgImg.onload = async () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Step 1: Draw uploaded image to a temp canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = bgImg.width;
+            tempCanvas.height = bgImg.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(bgImg, 0, 0);
+
+            // Step 2: Apply duotone if needed
+            if (duotoneColors) {
+                applyDuotoneToCanvas(tempCanvas, duotoneColors[0], duotoneColors[1]);
+            }
+
+            // Step 3: Crop to 1162x1230 centered, scaled to fill
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = targetWidth;
+            cropCanvas.height = targetHeight;
+            const cropCtx = cropCanvas.getContext('2d');
+
+            const scale = Math.max(
+                targetWidth / tempCanvas.width,
+                targetHeight / tempCanvas.height
+            );
+            const scaledWidth = tempCanvas.width * scale;
+            const scaledHeight = tempCanvas.height * scale;
+            const offsetX = (scaledWidth - targetWidth) / 2;
+            const offsetY = (scaledHeight - targetHeight) / 2;
+
+            cropCtx.drawImage(
+                tempCanvas,
+                -offsetX, -offsetY,
+                scaledWidth, scaledHeight
+            );
+
+            // Step 4: Draw cropped image to main canvas
+            ctx.drawImage(cropCanvas, targetX, targetY, targetWidth, targetHeight);
+
+            // Step 5: Overlay, seal, stars, text
+            const overlay = new Image();
+            overlay.src = 'cardOverlay.png';
+            overlay.onload = () => {
+                ctx.drawImage(overlay, 0, 0, canvas.width, canvas.height);
+
+                if (sealColor) {
+                    const sealImg = new Image();
+                    sealImg.src = `${sealColor}Seal.png`;
+                    sealImg.onload = () => {
+                        ctx.drawImage(sealImg, 0, 0, canvas.width, canvas.height);
+                        drawStarsThenText(stars);
+                    };
+                } else {
+                    drawStarsThenText(stars);
+                }
+            };
+        };
+    }
+
+    function drawStarsThenText(starCount) {
+        const canvas = document.getElementById('cardCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const starImg = new Image();
+        starImg.src = 'starOverlay.png';
+
+        starImg.onload = () => {
+            const startX = canvas.width - starImg.width - 100;
+            const startY = 74;
+
+            for (let i = 0; i < Math.min(5, starCount); i++) {
+                ctx.drawImage(starImg, startX, startY + i * (starImg.height + 10));
+            }
+
+            drawText();
+        };
+    }
+
+    function drawText() {
+        const canvas = document.getElementById('cardCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const eventName = document.getElementById("eventName").value;
+        const eventName2 = document.getElementById("eventName2").value;
+        const organizerName = document.getElementById("organizerName").value;
+        const eventDate = document.getElementById("eventDate").value;
+        const attendeeNum = document.getElementById("attendeeNum").value;
+        const editionNum = document.getElementById("editionNum").value;
+        const cardNum = document.getElementById("cardNum").value;
+        const hashAddress = document.getElementById("hashAddress").value;
+
+        // ## EVENT NAME ##
+        ctx.font = "94px EHSMB";
+        ctx.fillStyle = "black";
+        ctx.fillText(`${eventName}`, 43, 1330);
+
+        ctx.fillText(`${eventName2}`, 43, 1440);
+
+        // ## ORGANIZER NAME ##
+        ctx.font = "48px Consolas";
+        ctx.fillText(`${organizerName}`, 43, 1526);
+
+        // ## EVENT DATE ##
+        const dateText = `${eventDate}`;
+        const dateX = (canvas.width / 2 - ctx.measureText(dateText).width / 2) + 352;
+        ctx.fillText(dateText, dateX, 1624);
+
+        // ## ATTENDEE NUMBER ##
+        const attendeeText = `${attendeeNum}`;
+        ctx.font = "72px EHSMB";
+        ctx.fillStyle = "black";
+        const attendeeMetrics = ctx.measureText(attendeeText);
+        const attendeeX = (canvas.width / 2 - attendeeMetrics.width / 2) + 352;
+        ctx.fillRect(
+            attendeeX - 36,
+            1402 - 36,
+            attendeeMetrics.width + 72,
+            72 + 72
+        );
+        ctx.fillStyle = "white";
+        ctx.fillText(attendeeText, attendeeX, 1468);
+
+        // Edition #: white text, 24px font
+        ctx.font = "24px Consolas";
+        ctx.fillStyle = "white";
+        ctx.fillText(`#${editionNum}`, 263, 90);
+
+        // ## CARD NUMBER ##
+        const cardText = `${cardNum}`;
+        ctx.font = "48px Consolas";
+        ctx.fillStyle = "white";
+        const cardX = (canvas.width / 2 - ctx.measureText(cardText).width / 2) + 352;
+        ctx.fillRect(cardX - 10, 1264, ctx.measureText(cardText).width + 20, 50);
+        ctx.fillStyle = "black";
+        ctx.fillText(cardText, cardX, 1312);
+
+        // Hash
+        ctx.fillStyle = "black";
+        ctx.fillText(`Hash: ${hashAddress}`, 740, 1730);
+
+
+        const dataURL = canvas.toDataURL('image/png');
+        document.documentElement.style.setProperty('--nftfront', `url('${dataURL}')`);
+    }
+
+
+
+
+    // 3d card
+    var x;
+    var $cards = $(".card");
+    var $style = $(".hover");
+
+    $cards
+        .on("mousemove touchmove", function(e) {
+            // normalise touch/mouse
+            var pos = [e.offsetX,e.offsetY];
+            e.preventDefault();
+            if ( e.type === "touchmove" ) {
+                pos = [ e.touches[0].clientX, e.touches[0].clientY ];
+            }
+            var $card = $(this);
+            // math for mouse position
+            var l = pos[0];
+            var t = pos[1];
+            var h = $card.height();
+            var w = $card.width();
+            var px = Math.abs(Math.floor(100 / w * l)-100);
+            var py = Math.abs(Math.floor(100 / h * t)-100);
+            var pa = (50-px)+(50-py);
+            // math for gradient / background positions
+            var lp = (50+(px - 50)/1.5);
+            var tp = (50+(py - 50)/1.5);
+            var px_spark = (50+(px - 50)/7);
+            var py_spark = (50+(py - 50)/7);
+            var p_opc = 20+(Math.abs(pa)*1.5);
+            var ty = ((tp - 50)/2) * -1;
+            var tx = ((lp - 50)/1.5) * .5;
+            // css to apply for active card
+            var grad_pos = `background-position: ${lp}% ${tp}%;`
+            var sprk_pos = `background-position: ${px_spark}% ${py_spark}%;`
+            var opc = `opacity: ${p_opc/100};`
+            var tf = `transform: rotateX(${ty}deg) rotateY(${tx}deg)`
+            // need to use a <style> tag for psuedo elements
+            var style = `
+      .card:hover:before { ${grad_pos} }  /* gradient */
+      .card:hover:after { ${sprk_pos} ${opc} }   /* sparkles */
+    `
+            // set / apply css class and style
+            $cards.removeClass("active");
+            $card.removeClass("animated");
+            $card.attr( "style", tf );
+            $style.html(style);
+            if ( e.type === "touchmove" ) {
+                return false;
+            }
+            clearTimeout(x);
+        }).on("mouseout touchend touchcancel", function() {
+        // remove css, apply custom animation on end
+        var $card = $(this);
+        $style.html("");
+        $card.removeAttr("style");
+        x = setTimeout(function() {
+            $card.addClass("animated");
+        },2500);
+    });
+</script>
+
+</body>
+</html>
