@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="https://github.com/ssambender/nftViewer/blob/main/cardExample.png?raw=true" height=300>
+  <img src="cardExample.png" height=300>
   ‎ ‎ ‎ ‎ ‎ ‎ ‎ 
-  <img src="https://github.com/ssambender/nftViewer/blob/main/exampleSeasonPass.png?raw=true" height=300>
+  <img src="exampleSeasonPass.png" height=300>
   ‎ ‎ ‎ ‎ ‎ ‎ ‎ 
-  <img src="https://github.com/ssambender/nftViewer/blob/main/exampleVespa.png?raw=true" height=300>
+  <img src="exampleVespa.png" height=300>
 </div>
 
 <h3 align="center">NFT Viewer | Mint and view commemorative SBTs</h3>
